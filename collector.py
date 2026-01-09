@@ -191,6 +191,7 @@ def is_valid_telegram_link(link: str) -> bool:
     لا يجمع:
     - روابط البوتات (bot/)
     - روابط الدعوة مع invite/
+    -t.me/+1-9
     - روابط أخرى غير المطلوبة
     """
     link = link.lower().strip()
