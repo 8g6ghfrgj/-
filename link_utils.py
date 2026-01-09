@@ -275,7 +275,7 @@ def is_valid_telegram_link(link: str) -> bool:
     - روابط البوتات (bot/)
     - روابط الدعوة مع invite/
     - روابط الرسائل الفردية
-    -t.me/+1-9
+    - t.me/+1-9 (الهواتف - مرفوضة)
     - روابط بمسارات متعددة
     """
     link_lower = link.lower().strip()
@@ -302,6 +302,14 @@ def is_valid_telegram_link(link: str) -> bool:
     # رفض إذا كان هناك أكثر من جزء (مثال: t.me/username/123)
     if len(path_segments) > 1:
         return False
+    
+    # رفض الروابط التي تبدو كأرقام هواتف (مثل t.me/+123456789)
+    if first_segment.startswith('+') and len(first_segment) <= 12:
+        # إذا كان الرقم قصير (مثل +123456789) فهو رقم هاتف
+        # أرقام الهواتف عادة بين 7-12 رقم مع +
+        remaining = first_segment[1:]
+        if remaining.isdigit() and 7 <= len(remaining) <= 12:
+            return False
     
     # قبول فقط إذا كان:
     # 1. يبدأ بـ + ويتبعه أحرف/أرقام
