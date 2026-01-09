@@ -2,7 +2,7 @@ import sqlite3
 import os
 import shutil
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta  # التعديل هنا!
 from typing import Dict, List, Tuple, Optional
 from config import DATABASE_PATH
 
@@ -388,10 +388,13 @@ def save_link(
         conn.close()
         
         # تحديث الإحصائيات بعد كل 100 رابط
-        cur.execute("SELECT COUNT(*) FROM links")
-        total_count = cur.fetchone()[0]
-        if total_count % 100 == 0:
-            update_daily_stats()
+        try:
+            cur.execute("SELECT COUNT(*) FROM links")
+            total_count = cur.fetchone()[0]
+            if total_count % 100 == 0:
+                update_daily_stats()
+        except:
+            pass
         
     except sqlite3.IntegrityError:
         # تجاهل الأخطاء المتعلقة بتكرار الروابط
