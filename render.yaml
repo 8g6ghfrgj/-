@@ -1,10 +1,84 @@
 services:
-  - type: worker
-    name: telegram-multi-account-link-collector
-    runtime: docker
-    dockerfilePath: Dockerfile
+  # ======================
+  # Telegram Bot Service
+  # ======================
+  - type: web
+    name: telegram-link-collector-bot
+    env: python
+    region: frankfurt  # أو singapore حسب موقعك
+    plan: free  # يمكنك تغييره إلى starter أو pro
+    
+    # Build Settings
+    buildCommand: |
+      pip install --upgrade pip
+      pip install -r requirements.txt
+      python -c "from database import init_db; init_db()"
+    
+    # Start Command
+    startCommand: python bot.py
+    
+    # Environment Variables
     envVars:
       - key: BOT_TOKEN
+        sync: false  # ستحتاج لتعيينه يدوياً في Dashboard Render
+      - key: API_ID
+        sync: false
+      - key: API_HASH
         sync: false
       - key: DATABASE_PATH
-        value: data/database.db
+        value: /data/links.db  # مسار ثابت في Render
+      - key: TZ
+        value: Asia/Riyadh  # توقيت السعودية
+    
+    # Health Check (مهم لتجنب Sleep في الخطة المجانية)
+    healthCheckPath: /health
+    autoDeploy: true
+    
+    # Disk
+    disk:
+      name: data
+      mountPath: /data
+      sizeGB: 1  # 1GB للملفات والنسخ الاحتياطية
+    
+    # Advanced Settings
+    numInstances: 1
+    instanceSize: free  # أو 512MB أو 1GB حسب احتياجك
+
+# ======================
+# Cron Jobs for Maintenance
+# ======================
+jobs:
+  - type: cron
+    name: daily-backup
+    schedule: "0 3 * * *"  # الساعة 3 صباحاً يومياً (توقيت UTC)
+    env: python
+    region: frankfurt
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -c "from database import create_backup; create_backup()"
+    
+  - type: cron
+    name: optimize-database
+    schedule: "0 4 * * 0"  # كل يوم أحد الساعة 4 صباحاً
+    env: python
+    region: frankfurt
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -c "from database import optimize_database; optimize_database()"
+    
+  - type: cron
+    name: sessions-health-check
+    schedule: "0 */6 * * *"  # كل 6 ساعات
+    env: python
+    region: frankfurt
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -c "from session_manager import check_all_sessions_health; import asyncio; asyncio.run(check_all_sessions_health())"
+
+# ======================
+# Disk Configuration
+# ======================
+disk:
+  - name: data
+    mountPath: /data
+    sizeGB: 1
