@@ -8,15 +8,15 @@ from telethon.sessions import StringSession
 from telethon.tl.types import Message, MessageReplies
 
 from config import API_ID, API_HASH
-from session_manager import get_all_sessions
+from session_manager import get_active_sessions
 from database import save_link
 from link_utils import (
     extract_links_from_message,
     filter_and_classify_link,
-    extract_buttons_links
+    extract_buttons_links,
+    is_valid_telegram_link  # إضافة هذا الاستيراد
 )
 from file_extractors import extract_links_from_file
-from comment_extractor import extract_comments_links  # سأقوم بإنشاء هذا الملف لاحقاً
 
 # ======================
 # Logging
@@ -177,45 +177,6 @@ def is_within_last_60_days(message_date: datetime) -> bool:
 
 
 # ======================
-# Telegram Link Validator
-# ======================
-
-def is_valid_telegram_link(link: str) -> bool:
-    """
-    تحقق إذا كان الرابط رابط تليجرام صالح للتجميع
-    
-    يسمح فقط بـ:
-    1. t.me/+xxxxxxx (بدون كلمة invite/)
-    2. t.me/xxxxxxx (بدون كلمة invite/)
-    
-    لا يجمع:
-    - روابط البوتات (bot/)
-    - روابط الدعوة مع invite/
-    -t.me/+1-9
-    - روابط أخرى غير المطلوبة
-    """
-    link = link.lower().strip()
-    
-    # تجاهل الروابط التي تحتوي على bot/ أو invite/
-    if 't.me/' in link:
-        if '/bot/' in link or 't.me/bot/' in link or '/invite/' in link:
-            return False
-        
-        # استخراج الجزء بعد t.me/
-        parts = link.split('t.me/')
-        if len(parts) > 1:
-            path = parts[1].split('?')[0].split('/')[0]  # الحصول على الجزء الأول فقط
-            
-            # قبول فقط إذا كان يبدأ بـ + أو أرقام/حروف فقط
-            if path.startswith('+') and len(path) > 1:
-                return True
-            elif path.replace('_', '').replace('-', '').isalnum():
-                return True
-    
-    return False
-
-
-# ======================
 # Comment Extractor
 # ======================
 
@@ -232,11 +193,28 @@ async def extract_comment_links(client: TelegramClient, message: Message, accoun
                 # جلب التعليقات
                 async for reply in client.iter_messages(
                     message.chat_id,
-                    reply_to=message.id
+                    reply_to=message.id,
+                    limit=50  # حد أقصى 50 تعليق
                 ):
                     # استخراج الروابط من كل تعليق
                     reply_links = extract_links_from_message(reply)
-                    links.extend(reply_links)
+                    
+                    # تصفية الروابط مباشرة
+                    for link in reply_links:
+                        classified = filter_and_classify_link(link)
+                        if classified:
+                            platform, _ = classified
+                            # تطبيق الفلاتر
+                            if platform == 'whatsapp':
+                                if not is_within_last_60_days(message.date):
+                                    continue
+                            elif platform == 'telegram':
+                                if not is_valid_telegram_link(link):
+                                    continue
+                            else:
+                                continue  # تجاهل المنصات الأخرى
+                            
+                            links.append(link)
                     
     except Exception as e:
         logger.error(f"Error extracting comments: {e}")
@@ -339,7 +317,7 @@ async def process_message(
     - الملفات (PDF / DOCX)
     ثم حفظها بدون تكرار
     """
-    if not message or not message.text:
+    if not message:
         return
 
     # ======================
