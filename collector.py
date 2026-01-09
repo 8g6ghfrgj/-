@@ -63,7 +63,7 @@ async def start_collection():
         logger.info("Collection already running.")
         return
 
-    sessions = get_all_sessions()
+    sessions = get_active_sessions()
     if not sessions:
         logger.warning("No sessions found.")
         return
